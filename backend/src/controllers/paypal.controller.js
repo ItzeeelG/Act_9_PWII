@@ -1,35 +1,32 @@
 const { createPaypalOrder, capturePaypalOrder } = require('../servicio/paypal.service.js');
+const conexion = require('../config/db'); // ← importar la conexión
 
-//crear la orden y validar que si haya productos en el carrito y que el total sea mayor a 0.
+// Helper para usar query con async/await
+function query(sql, params) {
+  return new Promise((resolve, reject) => {
+    conexion.query(sql, params, (error, results) => {
+      if (error) reject(error);
+      else resolve(results);
+    });
+  });
+}
+
 async function createOrder(req, res) {
   try {
     const { items, total } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        error: 'El carrito está vacío'
-      });
+      return res.status(400).json({ error: 'El carrito está vacío' });
     }
-
     if (!total || Number(total) <= 0) {
-      return res.status(400).json({
-        error: 'El total es inválido'
-      });
+      return res.status(400).json({ error: 'El total es inválido' });
     }
 
     const order = await createPaypalOrder({ items, total });
+    res.status(200).json({ id: order.id, status: order.status });
 
-    res.status(200).json({
-      id: order.id,
-      status: order.status
-    });
   } catch (error) {
-    console.error('Error en createOrder:', error.message);
-
-    res.status(500).json({
-      error: 'No se pudo crear la orden',
-      detalle: error.message
-    });
+    res.status(500).json({ error: 'No se pudo crear la orden', detalle: error.message });
   }
 }
 
@@ -43,7 +40,18 @@ async function captureOrder(req, res) {
 
     const captureData = await capturePaypalOrder(orderId);
 
-    // Generar XML en el backend
+    // Solo actualizar la BD si el pago fue exitoso
+    if (captureData.status === 'COMPLETED') {
+      for (const p of (productos || [])) {
+        await query(
+          'UPDATE productos SET inStock = inStock - ? WHERE id = ?',
+          [p.inStock, p.id]
+        );
+      }
+      console.log('Stock actualizado correctamente');
+    }
+
+    // Generar XML del recibo
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<recibo>\n`;
     for (const p of (productos || [])) {
       xml += `  <producto>\n`;
@@ -61,10 +69,11 @@ async function captureOrder(req, res) {
 
     res.status(200).json({
       ...captureData,
-      xml: Buffer.from(xml).toString('base64') // XML en base64
+      xml: Buffer.from(xml).toString('base64')
     });
 
   } catch (error) {
+    console.error('Error en captureOrder:', error.message);
     res.status(500).json({ error: 'No se pudo capturar la orden', detalle: error.message });
   }
 }
