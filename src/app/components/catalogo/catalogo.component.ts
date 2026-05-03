@@ -1,7 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ProductCardComponent } from '../producto/producto.component';
-import { ProductoService } from '../../services/producto.service';
+import { ProductService } from '../../services/producto.service';
 import { Product } from '../../models/producto.model';
 import { CarritoService } from '../../services/carrito.service';
 import { CarritoComponent } from '../carrito/carrito.component';
@@ -16,7 +16,7 @@ import { CarritoComponent } from '../carrito/carrito.component';
 export class CatalogoComponent {
 
   // inject() permite usar el servicio antes de que el constructor se ejecute
-  private productService  = inject(ProductoService);
+  private productService = inject(ProductService);
   private carritoService  = inject(CarritoService);
 
   products = toSignal(this.productService.getAll(), { initialValue: [] as Product[] });
